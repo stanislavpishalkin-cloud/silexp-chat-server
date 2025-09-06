@@ -12,7 +12,7 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 3000;
 const DJANGO_URL = process.env.DJANGO_URL || 'https://silexp.ru';
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const NODE_ENV = process.env.NODE_ENV || 'production';
 
 console.log('Environment:', NODE_ENV);
 console.log('Django URL:', DJANGO_URL);
@@ -20,10 +20,17 @@ console.log('Django URL:', DJANGO_URL);
 // Инициализация Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: DJANGO_URL,
+    origin: [
+      "https://silexp.ru",        // ваш production сайт
+      "http://localhost:8000",    // для локальной разработки
+      "http://127.0.0.1:8000"     // для локальной разработки
+    ],
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  // Дополнительные настройки для production
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 // Хранилище для онлайн пользователей
@@ -38,6 +45,7 @@ axios.get(`${DJANGO_URL}/api/test/`)
   })
   .catch(error => {
     console.error('❌ Django connection failed:', error.message);
+    console.error('Full error:', error.response?.data);
   });
 
 // Обработка Socket.IO подключений
@@ -206,3 +214,4 @@ server.listen(PORT, () => {
   console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
