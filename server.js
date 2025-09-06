@@ -9,8 +9,14 @@ const app = express();
 app.use(cors());
 const server = http.createServer(app);
 
-const DJANGO_URL = 'https://silexp.ru';
+
 const PORT = process.env.PORT || 3000;
+const DJANGO_URL = process.env.DJANGO_URL || 'https://silexp.ru';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+console.log('Environment:', NODE_ENV);
+console.log('Django URL:', DJANGO_URL);
+
 // Инициализация Socket.IO
 const io = new Server(server, {
   cors: {
@@ -26,7 +32,7 @@ const roomConnections = new Map();
 // Тестирование подключения к Django
 console.log('🔍 Testing Django connection...');
 
-axios.get('${DJANGO_URL}/api/test/')
+axios.get(`${DJANGO_URL}/api/test/`)
   .then(response => {
     console.log('✅ Django connection successful:', response.data);
   })
@@ -83,7 +89,7 @@ io.on('connection', (socket) => {
       console.log(`📨 Received message for saving:`, { project_id, body, user_id });
       
       // Сохраняем через Django API
-      const response = await axios.post('${DJANGO_URL}/api/save-message/', {
+      const response = await axios.post(`${DJANGO_URL}/api/save-message/`, {
         project_id: project_id,
         body: body,
         author_id: user_id
@@ -142,7 +148,8 @@ io.on('connection', (socket) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Node.js server is running!',
+    message: 'Server is running',
+    environment: NODE_ENV,
     timestamp: new Date().toISOString(),
     active_rooms: Array.from(roomConnections.keys())
   });
@@ -165,7 +172,7 @@ app.get('/stats', (req, res) => {
 app.get('/test-django', async (req, res) => {
   try {
     console.log('Testing connection to Django...');
-    const response = await axios.get('${DJANGO_URL}/api/test/', {
+    const response = await axios.get(`${DJANGO_URL}/api/test/`, {
       timeout: 5000
     });
     
