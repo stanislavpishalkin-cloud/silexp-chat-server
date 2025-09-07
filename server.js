@@ -51,26 +51,26 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb();
   });
 
-    // Обработка отключения и повторного подключения
-    socket.on('disconnect', (reason) => {
-        console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
-        
-        // Выходим из всех комнат при отключении
-        if (socket.roomName && roomConnections.has(socket.roomName)) {
-            roomConnections.get(socket.roomName).delete(socket.id);
-            
-            const onlineCount = roomConnections.get(socket.roomName).size;
-            io.to(socket.roomName).emit('online_users_update', { 
-              count: onlineCount,
-              room: socket.roomName,
-              project_id: socket.project_id
-            });
+  socket.on('disconnect', (reason) => {
+      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+      
+      // Выходим из всех комнат при отключении
+      if (socket.roomName && roomConnections.has(socket.roomName)) {
+          roomConnections.get(socket.roomName).delete(socket.id);
           
-            if (roomConnections.get(socket.roomName).size === 0) {
-              roomConnections.delete(socket.roomName);
-            }
-        }
-    });
+          const onlineCount = roomConnections.get(socket.roomName).size;
+          io.to(socket.roomName).emit('online_users_update', { 
+            count: onlineCount,
+            room: socket.roomName,
+            project_id: socket.project_id
+          });
+        
+          // Удаляем комнату если она пустая
+          if (roomConnections.get(socket.roomName).size === 0) {
+            roomConnections.delete(socket.roomName);
+          }
+      }
+  });
 
   // Присоединение к комнате проекта
   socket.on('join_project_chat', async (roomData) => {
@@ -162,19 +162,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Отключение пользователя
-  socket.on('disconnect', () => {
-    if (socket.roomName && roomConnections.has(socket.roomName)) {
-      roomConnections.get(socket.roomName).delete(socket.id);
-      
-      // Отправляем обновление онлайн статуса
-      const onlineCount = roomConnections.get(socket.roomName).size;
-      io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
-    }
-    
-    console.log('❌ User disconnected:', socket.id);
-  });
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -250,6 +237,7 @@ io.engine.on("connection_error", (err) => {
 server.on('upgradeError', (error) => {
   console.error('🚨 Upgrade error:', error);
 });
+
 
 
 
