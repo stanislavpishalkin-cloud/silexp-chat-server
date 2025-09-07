@@ -54,19 +54,6 @@ io.on('connection', (socket) => {
             io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
         }
     });
-	
-    // Обработка отключения и повторного подключения
-    socket.on('disconnect', (reason) => {
-        console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
-        
-        // Выходим из всех комнат при отключении
-        if (socket.roomName && roomConnections.has(socket.roomName)) {
-            roomConnections.get(socket.roomName).delete(socket.id);
-            
-            const onlineCount = roomConnections.get(socket.roomName).size;
-            io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
-        }
-    });
 
   // Присоединение к комнате проекта
   socket.on('join_project_chat', async (roomData) => {
@@ -229,5 +216,6 @@ server.listen(PORT, () => {
   console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
 
 
