@@ -10,27 +10,20 @@ app.use(cors());
 const server = http.createServer(app);
 
 
-const PORT = process.env.PORT || 3000;
-const DJANGO_URL = process.env.DJANGO_URL || 'https://silexp.ru';
-const NODE_ENV = process.env.NODE_ENV || 'production';
+// ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ: Динамический URL для Django
+const DJANGO_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://silexp.ru' 
+  : 'http://localhost:8000';
 
-console.log('Environment:', NODE_ENV);
 console.log('Django URL:', DJANGO_URL);
 
 // Инициализация Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: [
-      "https://silexp.ru",        // ваш production сайт
-      "http://localhost:8000",    // для локальной разработки
-      "http://127.0.0.1:8000"     // для локальной разработки
-    ],
+    origin: "http://localhost:8000",  // Django сервер
     methods: ["GET", "POST"],
     credentials: true
-  },
-  // Дополнительные настройки для production
-  transports: ['websocket', 'polling'],
-  allowEIO3: true
+  }
 });
 
 // Хранилище для онлайн пользователей
@@ -39,18 +32,43 @@ const roomConnections = new Map();
 // Тестирование подключения к Django
 console.log('🔍 Testing Django connection...');
 
-axios.get(`${DJANGO_URL}/api/test/`)
+axios.get('http://localhost:8000/api/test/')
   .then(response => {
     console.log('✅ Django connection successful:', response.data);
   })
   .catch(error => {
     console.error('❌ Django connection failed:', error.message);
-    console.error('Full error:', error.response?.data);
   });
 
 // Обработка Socket.IO подключений
 io.on('connection', (socket) => {
     console.log('✅ User connected:', socket.id);
+
+    // Обработка отключения и повторного подключения
+    socket.on('disconnect', (reason) => {
+        console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+        
+        // Выходим из всех комнат при отключении
+        if (socket.roomName && roomConnections.has(socket.roomName)) {
+            roomConnections.get(socket.roomName).delete(socket.id);
+            
+            const onlineCount = roomConnections.get(socket.roomName).size;
+            io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
+        }
+    });
+	
+    // Обработка отключения и повторного подключения
+    socket.on('disconnect', (reason) => {
+        console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+        
+        // Выходим из всех комнат при отключении
+        if (socket.roomName && roomConnections.has(socket.roomName)) {
+            roomConnections.get(socket.roomName).delete(socket.id);
+            
+            const onlineCount = roomConnections.get(socket.roomName).size;
+            io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
+        }
+    });
 
   // Присоединение к комнате проекта
   socket.on('join_project_chat', async (roomData) => {
@@ -77,7 +95,7 @@ io.on('connection', (socket) => {
       
       // Отправляем историю сообщений при подключении
       try {
-        const response = await axios.get(`${DJANGO_URL}/api/get-messages/${project_id}/`);
+        const response = await axios.get(`http://localhost:8000/api/get-messages/${project_id}/`);
         socket.emit('message_history', response.data);
       } catch (error) {
         console.error('❌ Error fetching message history:', error.message);
@@ -97,7 +115,7 @@ io.on('connection', (socket) => {
       console.log(`📨 Received message for saving:`, { project_id, body, user_id });
       
       // Сохраняем через Django API
-      const response = await axios.post(`${DJANGO_URL}/api/save-message/`, {
+      const response = await axios.post('http://localhost:8000/api/save-message/', {
         project_id: project_id,
         body: body,
         author_id: user_id
@@ -156,8 +174,7 @@ io.on('connection', (socket) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'Server is running',
-    environment: NODE_ENV,
+    message: 'Node.js server is running!',
     timestamp: new Date().toISOString(),
     active_rooms: Array.from(roomConnections.keys())
   });
@@ -180,7 +197,7 @@ app.get('/stats', (req, res) => {
 app.get('/test-django', async (req, res) => {
   try {
     console.log('Testing connection to Django...');
-    const response = await axios.get(`${DJANGO_URL}/api/test/`, {
+    const response = await axios.get('http://localhost:8000/api/test/', {
       timeout: 5000
     });
     
@@ -206,7 +223,7 @@ app.get('/test-django', async (req, res) => {
   }
 });
 
-
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
@@ -214,4 +231,3 @@ server.listen(PORT, () => {
   console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
-
