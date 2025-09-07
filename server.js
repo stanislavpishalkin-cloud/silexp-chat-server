@@ -194,7 +194,7 @@ io.on('connection', (socket) => {
       });
     }
   });
-
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -270,6 +270,7 @@ io.engine.on("connection_error", (err) => {
 server.on('upgradeError', (error) => {
   console.error('🚨 Upgrade error:', error);
 });
+
 
 
 
