@@ -51,6 +51,7 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb();
   });
 
+  // В server.js обновите обработчик disconnect
   socket.on('disconnect', (reason) => {
       console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
       
@@ -58,16 +59,20 @@ io.on('connection', (socket) => {
       if (socket.roomName && roomConnections.has(socket.roomName)) {
           roomConnections.get(socket.roomName).delete(socket.id);
           
+          // Отправляем обновление онлайн статуса ДО удаления комнаты
           const onlineCount = roomConnections.get(socket.roomName).size;
           io.to(socket.roomName).emit('online_users_update', { 
-            count: onlineCount,
-            room: socket.roomName,
-            project_id: socket.project_id
+              count: onlineCount,
+              room: socket.roomName,
+              project_id: socket.project_id
           });
-        
+          
+          console.log(`👤 User left room ${socket.roomName}, now ${onlineCount} users`);
+          
           // Удаляем комнату если она пустая
           if (roomConnections.get(socket.roomName).size === 0) {
-            roomConnections.delete(socket.roomName);
+              roomConnections.delete(socket.roomName);
+              console.log(`🗑️ Room ${socket.roomName} deleted (empty)`);
           }
       }
   });
@@ -237,6 +242,7 @@ io.engine.on("connection_error", (err) => {
 server.on('upgradeError', (error) => {
   console.error('🚨 Upgrade error:', error);
 });
+
 
 
 
