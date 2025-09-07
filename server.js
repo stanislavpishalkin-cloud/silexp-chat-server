@@ -9,6 +9,7 @@ const app = express();
 app.use(cors());
 const server = http.createServer(app);
 
+const PORT = process.env.PORT || 3000;
 
 // ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ: Динамический URL для Django
 const DJANGO_URL = process.env.NODE_ENV === 'production' 
@@ -198,12 +199,11 @@ app.get('/test-django', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 Stats: http://localhost:${PORT}/stats`);
-  console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
+  console.log(`📍 Django URL: ${DJANGO_URL}`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
 
