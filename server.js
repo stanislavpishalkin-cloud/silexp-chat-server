@@ -60,7 +60,15 @@ io.on('connection', (socket) => {
             roomConnections.get(socket.roomName).delete(socket.id);
             
             const onlineCount = roomConnections.get(socket.roomName).size;
-            io.to(socket.roomName).emit('online_users_update', { count: onlineCount });
+            io.to(socket.roomName).emit('online_users_update', { 
+              count: onlineCount,
+              room: socket.roomName,
+              project_id: socket.project_id
+            });
+          
+            if (roomConnections.get(socket.roomName).size === 0) {
+              roomConnections.delete(socket.roomName);
+            }
         }
     });
 
@@ -85,7 +93,11 @@ io.on('connection', (socket) => {
       
       // Отправляем обновление онлайн статуса
       const onlineCount = roomConnections.get(roomName).size;
-      io.to(roomName).emit('online_users_update', { count: onlineCount });
+      io.to(roomName).emit('online_users_update', { 
+            count: onlineCount,
+            room: roomName,
+            project_id: project_id
+      });
       
       // Отправляем историю сообщений при подключении
       try {
@@ -238,5 +250,6 @@ io.engine.on("connection_error", (err) => {
 server.on('upgradeError', (error) => {
   console.error('🚨 Upgrade error:', error);
 });
+
 
 
