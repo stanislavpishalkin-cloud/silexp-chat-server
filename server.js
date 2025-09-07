@@ -77,6 +77,34 @@ io.on('connection', (socket) => {
       }
   });
 
+  socket.on('leave_project_chat', (roomData) => {
+    try {
+        const { project_id } = roomData;
+        const roomName = `project_${project_id}`;
+        
+        if (roomConnections.has(roomName)) {
+            roomConnections.get(roomName).delete(socket.id);
+            
+            const onlineCount = roomConnections.get(roomName).size;
+            io.to(roomName).emit('online_users_update', { 
+                count: onlineCount,
+                room: roomName,
+                project_id: project_id
+            });
+            
+            console.log(`👤 User manually left room ${roomName}, now ${onlineCount} users`);
+            
+            // Удаляем комнату если она пустая
+            if (roomConnections.get(roomName).size === 0) {
+                roomConnections.delete(roomName);
+                console.log(`🗑️ Room ${roomName} deleted (empty)`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error leaving room:', error);
+    }
+});
+
   // Присоединение к комнате проекта
   socket.on('join_project_chat', async (roomData) => {
     try {
@@ -242,6 +270,7 @@ io.engine.on("connection_error", (err) => {
 server.on('upgradeError', (error) => {
   console.error('🚨 Upgrade error:', error);
 });
+
 
 
 
