@@ -208,14 +208,13 @@ app.get('/test-django', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`📍 Stats: http://localhost:${PORT}/stats`);
-  console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
-  console.log(`📡 Socket.IO ready for connections`);
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(🚀 Server running on port ${PORT});
+  console.log(📍 Health check: http://0.0.0.0:${PORT}/health);
+  console.log(📍 Stats: http://0.0.0.0:${PORT}/stats);
+  console.log(📍 Test Django connection: http://0.0.0.0:${PORT}/test-django);
+  console.log(📡 Socket.IO ready for connections);
 });
-
 
 
