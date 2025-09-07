@@ -22,7 +22,7 @@ const io = new Server(server, {
     }
 });
 
-const DJANGO_URL = "https://your-domain.timeweb.ru";
+const DJANGO_URL = "https://silexp.ru";
 
 // Хранилище для онлайн пользователей
 const roomConnections = new Map();
@@ -229,4 +229,5 @@ server.listen(PORT, () => {
   console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
 
