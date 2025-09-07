@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000;
 
 // ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ: Динамический URL для Django
 const DJANGO_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://silexp.ru' 
+  ? 'https://silexp.ru:443' 
   : 'http://localhost:8000';
 
 console.log('Django URL:', DJANGO_URL);
@@ -205,5 +205,6 @@ server.listen(PORT, () => {
   console.log(`📍 Django URL: ${DJANGO_URL}`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
 
 
