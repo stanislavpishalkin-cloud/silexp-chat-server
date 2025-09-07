@@ -11,15 +11,19 @@ const server = http.createServer(app);
 
 // Инициализация Socket.IO
 const io = new Server(server, {
-    cors: {
-        origin: [
-            "https://silexp.ru",
-            "https://silexp-chat-server.onrender.com",
-            "http://localhost:8000" // для разработки
-        ],
-        methods: ["GET", "POST"],
-        credentials: true
-    }
+  cors: {
+    origin: [
+      "https://silexp.ru",
+      "https://silexp-chat-server.onrender.com",
+      "http://localhost:8000",
+      "http://localhost:3000" // для тестирования
+    ],
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  // Добавьте эти настройки для Render
+  transports: ['websocket', 'polling'],
+  allowEIO3: true
 });
 
 const DJANGO_URL = "https://silexp.ru";
@@ -40,7 +44,12 @@ axios.get(`${DJANGO_URL}/api/test/`)
 
 // Обработка Socket.IO подключений
 io.on('connection', (socket) => {
-    console.log('✅ User connected:', socket.id);
+  console.log('✅ User connected:', socket.id);
+  
+  // Добавьте ping/pong
+  socket.on('ping', (cb) => {
+    if (typeof cb === 'function') cb();
+  });
 
     // Обработка отключения и повторного подключения
     socket.on('disconnect', (reason) => {
@@ -210,11 +219,24 @@ app.get('/test-django', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(🚀 Server running on port ${PORT});
-  console.log(📍 Health check: http://0.0.0.0:${PORT}/health);
-  console.log(📍 Stats: http://0.0.0.0:${PORT}/stats);
-  console.log(📍 Test Django connection: http://0.0.0.0:${PORT}/test-django);
-  console.log(📡 Socket.IO ready for connections);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📍 Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`📍 Stats: http://0.0.0.0:${PORT}/stats`);
+  console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
+  console.log(`📡 Socket.IO ready for connections`);
+});
+
+// Добавьте после создания io instance
+io.engine.on("connection_error", (err) => {
+  console.log('🚨 Socket.IO connection error:', err.req);
+  console.log('🚨 Socket.IO error code:', err.code);
+  console.log('🚨 Socket.IO error message:', err.message);
+  console.log('🚨 Socket.IO error context:', err.context);
+});
+
+// Добавьте обработку upgrade errors
+server.on('upgradeError', (error) => {
+  console.error('🚨 Upgrade error:', error);
 });
 
 
