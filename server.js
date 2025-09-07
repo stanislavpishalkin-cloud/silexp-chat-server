@@ -13,7 +13,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: [
-            "https://ваш-домен.timeweb.ru",
+            "https://silexp.ru",
             "https://silexp-chat-server.onrender.com",
             "http://localhost:8000" // для разработки
         ],
@@ -229,3 +229,4 @@ server.listen(PORT, () => {
   console.log(`📍 Test Django connection: http://localhost:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
