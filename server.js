@@ -428,7 +428,7 @@ app.get('/test-django', async (req, res) => {
   }
 });
 
-// Обработчики ошибок
+// Обработчики ошибки
 io.engine.on("connection_error", (err) => {
   console.log('🚨 Socket.IO connection error:', err.req);
   console.log('🚨 Socket.IO error code:', err.code);
