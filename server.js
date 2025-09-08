@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -16,19 +15,16 @@ const io = new Server(server, {
       "https://silexp.ru",
       "https://silexp-chat-server.onrender.com",
       "http://localhost:8000",
-      "http://localhost:3000" // для тестирования
+      "http://localhost:3000"
     ],
     methods: ["GET", "POST"],
     credentials: true
   },
-  // Добавьте эти настройки для Render
   transports: ['websocket', 'polling'],
   allowEIO3: true
 });
 
 const DJANGO_URL = "https://silexp.ru";
-
-// Хранилище для онлайн пользователей
 const roomConnections = new Map();
 
 // Тестирование подключения к Django
@@ -46,66 +42,73 @@ axios.get(`${DJANGO_URL}/api/test/`)
 io.on('connection', (socket) => {
   console.log('✅ User connected:', socket.id);
   
-  // Добавьте ping/pong
   socket.on('ping', (cb) => {
     if (typeof cb === 'function') cb();
   });
 
-  // В server.js обновите обработчик disconnect
+  // Обработчик disconnect
   socket.on('disconnect', (reason) => {
-      console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+    console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
+    
+    if (socket.roomName && roomConnections.has(socket.roomName)) {
+      roomConnections.get(socket.roomName).delete(socket.id);
       
-      // Выходим из всех комнат при отключении
-      if (socket.roomName && roomConnections.has(socket.roomName)) {
-          roomConnections.get(socket.roomName).delete(socket.id);
-          
-          // Отправляем обновление онлайн статуса ДО удаления комнаты
-          const onlineCount = roomConnections.get(socket.roomName).size;
-          io.to(socket.roomName).emit('online_users_update', { 
-              count: onlineCount,
-              room: socket.roomName,
-              project_id: socket.project_id
-          });
-          
-          console.log(`👤 User left room ${socket.roomName}, now ${onlineCount} users`);
-          
-          // Удаляем комнату если она пустая
-          if (roomConnections.get(socket.roomName).size === 0) {
-              roomConnections.delete(socket.roomName);
-              console.log(`🗑️ Room ${socket.roomName} deleted (empty)`);
-          }
+      const onlineCount = roomConnections.get(socket.roomName).size;
+      const users = Array.from(roomConnections.get(socket.roomName).values());
+      
+      io.to(socket.roomName).emit('online_users_update', { 
+        count: onlineCount,
+        room: socket.roomName,
+        project_id: socket.project_id,
+        users: users // Отправляем список пользователей
+      });
+      
+      console.log(`👤 User left room ${socket.roomName}, now ${onlineCount} users`);
+      
+      if (roomConnections.get(socket.roomName).size === 0) {
+        roomConnections.delete(socket.roomName);
+        console.log(`🗑️ Room ${socket.roomName} deleted (empty)`);
       }
+    }
   });
 
+  // Обработчик leave_project_chat
   socket.on('leave_project_chat', (roomData) => {
     try {
-        const { project_id } = roomData;
-        const roomName = `project_${project_id}`;
+      const { project_id } = roomData;
+      const roomName = `project_${project_id}`;
+      
+      console.log(`👤 User requested to leave room: ${roomName}`);
+      
+      if (roomConnections.has(roomName)) {
+        roomConnections.get(roomName).delete(socket.id);
         
-        if (roomConnections.has(roomName)) {
-            roomConnections.get(roomName).delete(socket.id);
-            
-            const onlineCount = roomConnections.get(roomName).size;
-            io.to(roomName).emit('online_users_update', { 
-                count: onlineCount,
-                room: roomName,
-                project_id: project_id
-            });
-            
-            console.log(`👤 User manually left room ${roomName}, now ${onlineCount} users`);
-            
-            // Удаляем комнату если она пустая
-            if (roomConnections.get(roomName).size === 0) {
-                roomConnections.delete(roomName);
-                console.log(`🗑️ Room ${roomName} deleted (empty)`);
-            }
+        const onlineCount = roomConnections.get(roomName).size;
+        const users = Array.from(roomConnections.get(roomName).values());
+        
+        io.to(roomName).emit('online_users_update', { 
+          count: onlineCount,
+          room: roomName,
+          project_id: project_id,
+          users: users // Отправляем список пользователей
+        });
+        
+        console.log(`👤 User left room ${roomName}, now ${onlineCount} users`);
+        
+        if (onlineCount === 0) {
+          roomConnections.delete(roomName);
+          console.log(`🗑️ Room ${roomName} deleted (empty)`);
         }
+        
+        socket.leave(roomName);
+        console.log(`🚪 Socket left room: ${roomName}`);
+      }
     } catch (error) {
-        console.error('❌ Error leaving room:', error);
+      console.error('❌ Error leaving room:', error);
     }
-});
+  });
 
-  // Присоединение к комнате проекта
+  // Обработчик join_project_chat
   socket.on('join_project_chat', async (roomData) => {
     try {
       const { project_id, user_id, username } = roomData;
@@ -116,7 +119,6 @@ io.on('connection', (socket) => {
       socket.project_id = project_id;
       socket.user_id = user_id;
       
-      // Добавляем в хранилище
       if (!roomConnections.has(roomName)) {
         roomConnections.set(roomName, new Map());
       }
@@ -124,15 +126,16 @@ io.on('connection', (socket) => {
       
       console.log(`👥 ${username} joined project chat ${project_id}`);
       
-      // Отправляем обновление онлайн статуса
       const onlineCount = roomConnections.get(roomName).size;
+      const users = Array.from(roomConnections.get(roomName).values());
+      
       io.to(roomName).emit('online_users_update', { 
-            count: onlineCount,
-            room: roomName,
-            project_id: project_id
+        count: onlineCount,
+        room: roomName,
+        project_id: project_id,
+        users: users // Отправляем список пользователей
       });
       
-      // Отправляем историю сообщений при подключении
       try {
         const response = await axios.get(`${DJANGO_URL}/api/get-messages/${project_id}/`);
         socket.emit('message_history', response.data);
@@ -145,7 +148,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ОТПРАВКА СООБЩЕНИЯ
+  // Обработчик send_message
   socket.on('send_message', async (messageData) => {
     try {
       const { project_id, body, user_id, username, first_name } = messageData;
@@ -153,7 +156,6 @@ io.on('connection', (socket) => {
       
       console.log(`📨 Received message for saving:`, { project_id, body, user_id });
       
-      // Сохраняем через Django API
       const response = await axios.post(`${DJANGO_URL}/api/save-message/`, {
         project_id: project_id,
         body: body,
@@ -165,7 +167,6 @@ io.on('connection', (socket) => {
       console.log('✅ Message saved in Django database:', response.data);
       
       if (response.data.status === 'success') {
-        // Отправляем сообщение в комнату
         io.to(roomName).emit('receive_message', {
           id: response.data.message_id,
           body: body,
@@ -194,7 +195,8 @@ io.on('connection', (socket) => {
       });
     }
   });
-});
+
+}); // Конец io.on('connection')
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -219,7 +221,39 @@ app.get('/stats', (req, res) => {
   });
 });
 
-// Тестовый endpoint для проверки связи с Django
+// Endpoint для получения информации о комнате
+app.get('/room-info/:project_id', (req, res) => {
+  const project_id = req.params.project_id;
+  const roomName = `project_${project_id}`;
+  
+  const roomInfo = roomConnections.has(roomName) ? {
+    exists: true,
+    user_count: roomConnections.get(roomName).size,
+    users: Array.from(roomConnections.get(roomName).values())
+  } : {
+    exists: false,
+    user_count: 0,
+    users: []
+  };
+  
+  res.json(roomInfo);
+});
+
+// Endpoint для сброса комнат
+app.get('/reset-rooms', (req, res) => {
+  const previousCount = roomConnections.size;
+  roomConnections.clear();
+  
+  console.log(`🗑️ Cleared all rooms (${previousCount} rooms removed)`);
+  
+  res.json({
+    status: 'success',
+    message: `Cleared ${previousCount} rooms`,
+    rooms_cleared: previousCount
+  });
+});
+
+// Тестовый endpoint
 app.get('/test-django', async (req, res) => {
   try {
     console.log('Testing connection to Django...');
@@ -249,6 +283,18 @@ app.get('/test-django', async (req, res) => {
   }
 });
 
+// Обработчики ошибок
+io.engine.on("connection_error", (err) => {
+  console.log('🚨 Socket.IO connection error:', err.req);
+  console.log('🚨 Socket.IO error code:', err.code);
+  console.log('🚨 Socket.IO error message:', err.message);
+  console.log('🚨 Socket.IO error context:', err.context);
+});
+
+server.on('upgradeError', (error) => {
+  console.error('🚨 Upgrade error:', error);
+});
+
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -257,23 +303,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
-
-// Добавьте после создания io instance
-io.engine.on("connection_error", (err) => {
-  console.log('🚨 Socket.IO connection error:', err.req);
-  console.log('🚨 Socket.IO error code:', err.code);
-  console.log('🚨 Socket.IO error message:', err.message);
-  console.log('🚨 Socket.IO error context:', err.context);
-});
-
-// Добавьте обработку upgrade errors
-server.on('upgradeError', (error) => {
-  console.error('🚨 Upgrade error:', error);
-});
-
-
-
-
-
-
-
