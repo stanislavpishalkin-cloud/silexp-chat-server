@@ -109,17 +109,13 @@ io.on('connection', (socket) => {
         
         socket.leave(roomName);
         console.log(`🚪 Socket left room: ${roomName}`);
-        
-        // Сбрасываем roomName у сокета
-        socket.roomName = null;
-        socket.project_id = null;
       }
     } catch (error) {
       console.error('❌ Error leaving room:', error);
     }
   });
 
-  // Обработчик rejoin_project_chat - ПЕРЕДЕЛАН
+  // Обработчик rejoin_project_chat
   socket.on('rejoin_project_chat', async (roomData) => {
     try {
       const { project_id, user_id, username } = roomData;
@@ -127,29 +123,24 @@ io.on('connection', (socket) => {
       
       console.log(`🔁 User rejoining room: ${roomName}`);
       
-      // Выходим из предыдущей комнаты если была
-      if (socket.roomName && socket.roomName !== roomName) {
-        socket.leave(socket.roomName);
-      }
-      
-      // Присоединяем сокет к комнате
-      socket.join(roomName);
-      socket.roomName = roomName;
-      socket.project_id = project_id;
-      socket.user_id = user_id;
-      
-      // Создаем комнату если не существует
+      // Принудительно добавляем пользователя в комнату
       if (!roomConnections.has(roomName)) {
         roomConnections.set(roomName, new Map());
       }
       
-      // Добавляем/обновляем пользователя
+      // Обновляем информацию о пользователе
       roomConnections.get(roomName).set(user_id, { 
         user_id, 
         username,
         socket_id: socket.id,
         joined_at: new Date().toISOString()
       });
+      
+      // Присоединяем сокет к комнате
+      socket.join(roomName);
+      socket.roomName = roomName;
+      socket.project_id = project_id;
+      socket.user_id = user_id;
       
       const onlineCount = roomConnections.get(roomName).size;
       const users = Array.from(roomConnections.get(roomName).values());
@@ -166,7 +157,6 @@ io.on('connection', (socket) => {
       try {
         const response = await axios.get(`${DJANGO_URL}/api/get-messages/${project_id}/`);
         socket.emit('message_history', response.data);
-        console.log(`📚 Sent ${response.data.length} messages to rejoining user`);
       } catch (error) {
         console.error('❌ Error fetching message history for rejoin:', error.message);
       }
@@ -187,6 +177,7 @@ io.on('connection', (socket) => {
         const onlineCount = roomConnections.get(roomName).size;
         const users = Array.from(roomConnections.get(roomName).values());
         
+        // Отправляем обновление запросившему пользователю
         socket.emit('request_room_update_response', {
           count: onlineCount,
           room: roomName,
@@ -196,6 +187,7 @@ io.on('connection', (socket) => {
         
         console.log(`📋 Room update sent for ${roomName}: ${onlineCount} users`);
       } else {
+        // Если комнаты нет, отправляем пустой ответ
         socket.emit('request_room_update_response', {
           count: 0,
           room: roomName,
@@ -231,11 +223,6 @@ io.on('connection', (socket) => {
       const { project_id, user_id, username } = roomData;
       const roomName = `project_${project_id}`;
       
-      // Выходим из предыдущей комнаты если была
-      if (socket.roomName && socket.roomName !== roomName) {
-        socket.leave(socket.roomName);
-      }
-      
       socket.join(roomName);
       socket.roomName = roomName;
       socket.project_id = project_id;
@@ -245,6 +232,12 @@ io.on('connection', (socket) => {
         roomConnections.set(roomName, new Map());
       }
       
+      // Проверяем, есть ли уже пользователь в комнате
+      if (roomConnections.get(roomName).has(user_id)) {
+        console.log(`🔄 User ${username} already in room, updating connection`);
+      }
+      
+      // Храним по user_id вместо socket.id
       roomConnections.get(roomName).set(user_id, { 
         user_id, 
         username,
@@ -367,7 +360,7 @@ app.get('/room-info/:project_id', (req, res) => {
   res.json(roomInfo);
 });
 
-// Endpoint для отладки комнаты
+// Endpoint для отладки комната
 app.get('/debug-room/:project_id', (req, res) => {
   const project_id = req.params.project_id;
   const roomName = `project_${project_id}`;
