@@ -46,10 +46,11 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb();
   });
 
-  // Обработчик disconnect
+  // Обработчик disconnect - УДАЛЯЕМ ПОЛЬЗОВАТЕЛЯ ПРИ РАЗРЫВЕ СОЕДИНЕНИЯ
   socket.on('disconnect', (reason) => {
     console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
     
+    // Удаляем пользователя из всех комнат, где он был
     if (socket.roomName && roomConnections.has(socket.roomName) && socket.user_id) {
       // Удаляем пользователя по user_id
       if (roomConnections.get(socket.roomName).has(socket.user_id)) {
@@ -57,8 +58,9 @@ io.on('connection', (socket) => {
         roomConnections.get(socket.roomName).delete(socket.user_id);
         
         const onlineCount = roomConnections.get(socket.roomName).size;
-        const users = Array.from(roomConnections.get(roomName).values());
+        const users = Array.from(roomConnections.get(socket.roomName).values());
         
+        // Отправляем обновление ВСЕМ оставшимся в комнате
         io.to(socket.roomName).emit('online_users_update', { 
           count: onlineCount,
           room: socket.roomName,
@@ -66,7 +68,7 @@ io.on('connection', (socket) => {
           users: users
         });
         
-        console.log(`👤 User ${userInfo.username} left room ${socket.roomName}, now ${onlineCount} users`);
+        console.log(`👤 User ${userInfo.username} disconnected from room ${socket.roomName}, now ${onlineCount} users`);
         
         if (roomConnections.get(socket.roomName).size === 0) {
           roomConnections.delete(socket.roomName);
@@ -314,34 +316,6 @@ io.on('connection', (socket) => {
         message: 'Failed to send message',
         details: error.response?.data || error.message
       });
-    }
-  });
-
-  // Обработчик проверки состояния комнаты
-  socket.on('check_room_status', (roomData) => {
-    try {
-      const { project_id } = roomData;
-      const roomName = `project_${project_id}`;
-      
-      if (roomConnections.has(roomName)) {
-        const userInRoom = roomConnections.get(roomName).has(socket.user_id);
-        
-        socket.emit('room_status_response', {
-          in_room: userInRoom,
-          room: roomName,
-          project_id: project_id
-        });
-        
-        console.log(`📊 Room status check: user ${userInRoom ? 'in' : 'not in'} room ${roomName}`);
-      } else {
-        socket.emit('room_status_response', {
-          in_room: false,
-          room: roomName,
-          project_id: project_id
-        });
-      }
-    } catch (error) {
-      console.error('❌ Error checking room status:', error);
     }
   });
 
