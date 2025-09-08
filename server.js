@@ -60,7 +60,7 @@ io.on('connection', (socket) => {
         count: onlineCount,
         room: socket.roomName,
         project_id: socket.project_id,
-        users: users // Отправляем список пользователей
+        users: users
       });
       
       console.log(`👤 User left room ${socket.roomName}, now ${onlineCount} users`);
@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
           count: onlineCount,
           room: roomName,
           project_id: project_id,
-          users: users // Отправляем список пользователей
+          users: users
         });
         
         console.log(`👤 User left room ${roomName}, now ${onlineCount} users`);
@@ -105,6 +105,86 @@ io.on('connection', (socket) => {
       }
     } catch (error) {
       console.error('❌ Error leaving room:', error);
+    }
+  });
+
+  // Обработчик rejoin_project_chat
+  socket.on('rejoin_project_chat', async (roomData) => {
+    try {
+      const { project_id, user_id, username } = roomData;
+      const roomName = `project_${project_id}`;
+      
+      console.log(`🔁 User rejoining room: ${roomName}`);
+      
+      if (roomConnections.has(roomName)) {
+        // Добавляем пользователя обратно в комнату
+        roomConnections.get(roomName).set(socket.id, { user_id, username });
+        
+        const onlineCount = roomConnections.get(roomName).size;
+        const users = Array.from(roomConnections.get(roomName).values());
+        
+        // Отправляем обновление ВСЕМ в комнате
+        io.to(roomName).emit('online_users_update', { 
+          count: onlineCount,
+          room: roomName,
+          project_id: project_id,
+          users: users
+        });
+        
+        // Отправляем историю сообщений возвращающемуся пользователю
+        try {
+          const response = await axios.get(`${DJANGO_URL}/api/get-messages/${project_id}/`);
+          socket.emit('message_history', response.data);
+        } catch (error) {
+          console.error('❌ Error fetching message history for rejoin:', error.message);
+        }
+        
+        console.log(`👤 User rejoined room ${roomName}, now ${onlineCount} users`);
+      }
+    } catch (error) {
+      console.error('❌ Error rejoining room:', error);
+    }
+  });
+
+  // Обработчик запроса обновления комнаты
+  socket.on('request_room_update', (roomData) => {
+    try {
+      const { project_id } = roomData;
+      const roomName = `project_${project_id}`;
+      
+      if (roomConnections.has(roomName)) {
+        const onlineCount = roomConnections.get(roomName).size;
+        const users = Array.from(roomConnections.get(roomName).values());
+        
+        // Отправляем обновление запросившему пользователю
+        socket.emit('request_room_update_response', {
+          count: onlineCount,
+          room: roomName,
+          project_id: project_id,
+          users: users
+        });
+        
+        console.log(`📋 Room update sent for ${roomName}: ${onlineCount} users`);
+      }
+    } catch (error) {
+      console.error('❌ Error sending room update:', error);
+    }
+  });
+
+  // Обработчик запроса истории сообщений
+  socket.on('get_message_history', async (roomData) => {
+    try {
+      const { project_id } = roomData;
+      
+      try {
+        const response = await axios.get(`${DJANGO_URL}/api/get-messages/${project_id}/`);
+        socket.emit('message_history', response.data);
+        console.log(`📚 Message history sent for project ${project_id}`);
+      } catch (error) {
+        console.error('❌ Error fetching message history:', error.message);
+      }
+    } catch (error) {
+      console.error('❌ Error in get_message_history:', error);
     }
   });
 
@@ -133,7 +213,7 @@ io.on('connection', (socket) => {
         count: onlineCount,
         room: roomName,
         project_id: project_id,
-        users: users // Отправляем список пользователей
+        users: users
       });
       
       try {
@@ -148,35 +228,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Добавьте этот обработчик в server.js после join_project_chat
-  socket.on('rejoin_project_chat', (roomData) => {
-      try {
-          const { project_id, user_id, username } = roomData;
-          const roomName = `project_${project_id}`;
-          
-          console.log(`🔁 User rejoining room: ${roomName}`);
-          
-          if (roomConnections.has(roomName)) {
-              // Добавляем пользователя обратно в комнату
-              roomConnections.get(roomName).set(socket.id, { user_id, username });
-              
-              const onlineCount = roomConnections.get(roomName).size;
-              const users = Array.from(roomConnections.get(roomName).values());
-              
-              io.to(roomName).emit('online_users_update', { 
-                  count: onlineCount,
-                  room: roomName,
-                  project_id: project_id,
-                  users: users
-              });
-              
-              console.log(`👤 User rejoined room ${roomName}, now ${onlineCount} users`);
-          }
-      } catch (error) {
-          console.error('❌ Error rejoining room:', error);
-      }
-  });
-  
   // Обработчик send_message
   socket.on('send_message', async (messageData) => {
     try {
@@ -332,4 +383,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
-
