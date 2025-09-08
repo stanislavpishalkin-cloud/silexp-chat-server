@@ -148,6 +148,35 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Добавьте этот обработчик в server.js после join_project_chat
+  socket.on('rejoin_project_chat', (roomData) => {
+      try {
+          const { project_id, user_id, username } = roomData;
+          const roomName = `project_${project_id}`;
+          
+          console.log(`🔁 User rejoining room: ${roomName}`);
+          
+          if (roomConnections.has(roomName)) {
+              // Добавляем пользователя обратно в комнату
+              roomConnections.get(roomName).set(socket.id, { user_id, username });
+              
+              const onlineCount = roomConnections.get(roomName).size;
+              const users = Array.from(roomConnections.get(roomName).values());
+              
+              io.to(roomName).emit('online_users_update', { 
+                  count: onlineCount,
+                  room: roomName,
+                  project_id: project_id,
+                  users: users
+              });
+              
+              console.log(`👤 User rejoined room ${roomName}, now ${onlineCount} users`);
+          }
+      } catch (error) {
+          console.error('❌ Error rejoining room:', error);
+      }
+  });
+  
   // Обработчик send_message
   socket.on('send_message', async (messageData) => {
     try {
@@ -303,3 +332,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
+
