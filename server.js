@@ -26,6 +26,7 @@ const io = new Server(server, {
 
 const DJANGO_URL = "https://silexp.ru";
 const roomConnections = new Map();
+const userRooms = new Map(); // Трекаем комнаты пользователей
 
 // Тестирование подключения к Django
 console.log('🔍 Testing Django connection...');
@@ -50,61 +51,62 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     console.log('❌ User disconnected:', socket.id, 'Reason:', reason);
     
-    if (socket.roomName && roomConnections.has(socket.roomName) && socket.user_id) {
-      // Удаляем пользователя по user_id
-      if (roomConnections.get(socket.roomName).has(socket.user_id)) {
-        const userInfo = roomConnections.get(socket.roomName).get(socket.user_id);
-        roomConnections.get(socket.roomName).delete(socket.user_id);
+    // Удаляем пользователя из всех комнат
+    if (userRooms.has(socket.id)) {
+      const roomName = userRooms.get(socket.id);
+      
+      if (roomConnections.has(roomName)) {
+        roomConnections.get(roomName).delete(socket.id);
         
-        const onlineCount = roomConnections.get(socket.roomName).size;
-        const users = Array.from(roomConnections.get(socket.roomName).values());
+        const onlineCount = roomConnections.get(roomName).size;
+        const users = Array.from(roomConnections.get(roomName).values());
         
-        io.to(socket.roomName).emit('online_users_update', { 
+        io.to(roomName).emit('online_users_update', { 
           count: onlineCount,
-          room: socket.roomName,
-          project_id: socket.project_id,
+          room: roomName,
+          project_id: roomName.replace('project_', ''),
           users: users
         });
         
-        console.log(`👤 User ${userInfo.username} left room ${socket.roomName}, now ${onlineCount} users`);
+        console.log(`👤 User left room ${roomName}, now ${onlineCount} users`);
         
-        if (roomConnections.get(socket.roomName).size === 0) {
-          roomConnections.delete(socket.roomName);
-          console.log(`🗑️ Room ${socket.roomName} deleted (empty)`);
+        if (roomConnections.get(roomName).size === 0) {
+          roomConnections.delete(roomName);
+          console.log(`🗑️ Room ${roomName} deleted (empty)`);
         }
       }
+      
+      userRooms.delete(socket.id);
     }
   });
 
   // Обработчик leave_project_chat
   socket.on('leave_project_chat', (roomData) => {
     try {
-      const { project_id, user_id } = roomData;
+      const { project_id } = roomData;
       const roomName = `project_${project_id}`;
       
       console.log(`👤 User requested to leave room: ${roomName}`);
       
-      if (roomConnections.has(roomName) && user_id) {
-        if (roomConnections.get(roomName).has(user_id)) {
-          const userInfo = roomConnections.get(roomName).get(user_id);
-          roomConnections.get(roomName).delete(user_id);
-          
-          const onlineCount = roomConnections.get(roomName).size;
-          const users = Array.from(roomConnections.get(roomName).values());
-          
-          io.to(roomName).emit('online_users_update', { 
-            count: onlineCount,
-            room: roomName,
-            project_id: project_id,
-            users: users
-          });
-          
-          console.log(`👤 User ${userInfo.username} left room ${roomName}, now ${onlineCount} users`);
-          
-          if (onlineCount === 0) {
-            roomConnections.delete(roomName);
-            console.log(`🗑️ Room ${roomName} deleted (empty)`);
-          }
+      if (roomConnections.has(roomName) && userRooms.get(socket.id) === roomName) {
+        roomConnections.get(roomName).delete(socket.id);
+        userRooms.delete(socket.id);
+        
+        const onlineCount = roomConnections.get(roomName).size;
+        const users = Array.from(roomConnections.get(roomName).values());
+        
+        io.to(roomName).emit('online_users_update', { 
+          count: onlineCount,
+          room: roomName,
+          project_id: project_id,
+          users: users
+        });
+        
+        console.log(`👤 User left room ${roomName}, now ${onlineCount} users`);
+        
+        if (onlineCount === 0) {
+          roomConnections.delete(roomName);
+          console.log(`🗑️ Room ${roomName} deleted (empty)`);
         }
         
         socket.leave(roomName);
@@ -124,45 +126,23 @@ io.on('connection', (socket) => {
       console.log(`🔁 User rejoining room: ${roomName}`);
       
       // Выходим из предыдущей комнаты если была
-      if (socket.roomName && socket.roomName !== roomName) {
-        if (roomConnections.has(socket.roomName) && roomConnections.get(socket.roomName).has(user_id)) {
-          roomConnections.get(socket.roomName).delete(user_id);
-          
-          const onlineCount = roomConnections.get(socket.roomName).size;
-          const users = Array.from(roomConnections.get(socket.roomName).values());
-          
-          io.to(socket.roomName).emit('online_users_update', { 
-            count: onlineCount,
-            room: socket.roomName,
-            project_id: socket.roomName.replace('project_', ''),
-            users: users
-          });
-          
-          if (onlineCount === 0) {
-            roomConnections.delete(socket.roomName);
-          }
+      if (userRooms.has(socket.id)) {
+        const oldRoom = userRooms.get(socket.id);
+        if (oldRoom !== roomName && roomConnections.has(oldRoom)) {
+          roomConnections.get(oldRoom).delete(socket.id);
+          socket.leave(oldRoom);
+          console.log(`🚪 Left previous room: ${oldRoom}`);
         }
-        socket.leave(socket.roomName);
       }
       
-      // Присоединяем сокет к комнате
-      socket.join(roomName);
-      socket.roomName = roomName;
-      socket.project_id = project_id;
-      socket.user_id = user_id;
-      
-      // Создаем комнату если не существует
       if (!roomConnections.has(roomName)) {
         roomConnections.set(roomName, new Map());
       }
       
-      // Добавляем/обновляем пользователя по user_id
-      roomConnections.get(roomName).set(user_id, { 
-        user_id, 
-        username,
-        socket_id: socket.id,
-        joined_at: new Date().toISOString()
-      });
+      // Добавляем пользователя обратно в комнату
+      roomConnections.get(roomName).set(socket.id, { user_id, username });
+      userRooms.set(socket.id, roomName);
+      socket.join(roomName);
       
       const onlineCount = roomConnections.get(roomName).size;
       const users = Array.from(roomConnections.get(roomName).values());
@@ -183,7 +163,7 @@ io.on('connection', (socket) => {
         console.error('❌ Error fetching message history for rejoin:', error.message);
       }
       
-      console.log(`👤 User ${username} rejoined room ${roomName}, now ${onlineCount} users`);
+      console.log(`👤 User rejoined room ${roomName}, now ${onlineCount} users`);
     } catch (error) {
       console.error('❌ Error rejoining room:', error);
     }
@@ -199,6 +179,7 @@ io.on('connection', (socket) => {
         const onlineCount = roomConnections.get(roomName).size;
         const users = Array.from(roomConnections.get(roomName).values());
         
+        // Отправляем обновление запросившему пользователю
         socket.emit('request_room_update_response', {
           count: onlineCount,
           room: roomName,
@@ -244,43 +225,33 @@ io.on('connection', (socket) => {
       const roomName = `project_${project_id}`;
       
       // Выходим из предыдущей комнаты если была
-      if (socket.roomName && socket.roomName !== roomName) {
-        if (roomConnections.has(socket.roomName) && roomConnections.get(socket.roomName).has(user_id)) {
-          roomConnections.get(socket.roomName).delete(user_id);
+      if (userRooms.has(socket.id)) {
+        const oldRoom = userRooms.get(socket.id);
+        if (oldRoom !== roomName && roomConnections.has(oldRoom)) {
+          roomConnections.get(oldRoom).delete(socket.id);
           
-          const onlineCount = roomConnections.get(socket.roomName).size;
-          const users = Array.from(roomConnections.get(socket.roomName).values());
+          const oldOnlineCount = roomConnections.get(oldRoom).size;
+          const oldUsers = Array.from(roomConnections.get(oldRoom).values());
           
-          io.to(socket.roomName).emit('online_users_update', { 
-            count: onlineCount,
-            room: socket.roomName,
-            project_id: socket.roomName.replace('project_', ''),
-            users: users
+          io.to(oldRoom).emit('online_users_update', { 
+            count: oldOnlineCount,
+            room: oldRoom,
+            project_id: oldRoom.replace('project_', ''),
+            users: oldUsers
           });
           
-          if (onlineCount === 0) {
-            roomConnections.delete(socket.roomName);
-          }
+          socket.leave(oldRoom);
+          console.log(`🚪 Left previous room: ${oldRoom}`);
         }
-        socket.leave(socket.roomName);
       }
       
       socket.join(roomName);
-      socket.roomName = roomName;
-      socket.project_id = project_id;
-      socket.user_id = user_id;
+      userRooms.set(socket.id, roomName);
       
       if (!roomConnections.has(roomName)) {
         roomConnections.set(roomName, new Map());
       }
-      
-      // Храним по user_id вместо socket.id
-      roomConnections.get(roomName).set(user_id, { 
-        user_id, 
-        username,
-        socket_id: socket.id,
-        joined_at: new Date().toISOString()
-      });
+      roomConnections.get(roomName).set(socket.id, { user_id, username });
       
       console.log(`👥 ${username} joined project chat ${project_id}`);
       
@@ -356,91 +327,6 @@ io.on('connection', (socket) => {
 
 }); // Конец io.on('connection')
 
-// 🔧 ADMIN ENDPOINTS
-
-// Endpoint для принудительного сброса всех комнат
-app.get('/admin/reset-all', (req, res) => {
-  const roomCount = roomConnections.size;
-  let userCount = 0;
-  
-  // Считаем общее количество пользователей
-  roomConnections.forEach(room => {
-    userCount += room.size;
-  });
-  
-  // Очищаем все комнаты
-  roomConnections.clear();
-  
-  console.log(`🛑 ADMIN: Cleared all rooms (${roomCount} rooms, ${userCount} users)`);
-  
-  // Отправляем всем клиентам команду на обновление
-  io.emit('force_refresh', { 
-    message: 'Server was reset by admin',
-    reset_time: new Date().toISOString()
-  });
-  
-  res.json({
-    status: 'success',
-    message: `Cleared ${roomCount} rooms and ${userCount} users`,
-    rooms_cleared: roomCount,
-    users_cleared: userCount,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Endpoint для просмотра текущего состояния комнат
-app.get('/admin/status', (req, res) => {
-  const roomsStatus = {};
-  let totalUsers = 0;
-  
-  roomConnections.forEach((users, roomName) => {
-    const userList = Array.from(users.values());
-    roomsStatus[roomName] = {
-      user_count: users.size,
-      users: userList
-    };
-    totalUsers += users.size;
-  });
-  
-  res.json({
-    server_status: 'online',
-    total_rooms: roomConnections.size,
-    total_users: totalUsers,
-    rooms: roomsStatus,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Endpoint для сброса конкретной комнаты
-app.get('/admin/reset-room/:project_id', (req, res) => {
-  const project_id = req.params.project_id;
-  const roomName = `project_${project_id}`;
-  
-  let userCount = 0;
-  
-  if (roomConnections.has(roomName)) {
-    userCount = roomConnections.get(roomName).size;
-    roomConnections.delete(roomName);
-    
-    // Отправляем событие о сбросе комнаты
-    io.to(roomName).emit('room_reset', {
-      room: roomName,
-      project_id: project_id,
-      message: 'Room was reset by admin'
-    });
-    
-    console.log(`🛑 ADMIN: Cleared room ${roomName} (${userCount} users)`);
-  }
-  
-  res.json({
-    status: 'success',
-    message: `Cleared room ${roomName}`,
-    users_cleared: userCount,
-    room: roomName,
-    timestamp: new Date().toISOString()
-  });
-});
-
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
@@ -486,6 +372,7 @@ app.get('/room-info/:project_id', (req, res) => {
 app.get('/reset-rooms', (req, res) => {
   const previousCount = roomConnections.size;
   roomConnections.clear();
+  userRooms.clear();
   
   console.log(`🗑️ Cleared all rooms (${previousCount} rooms removed)`);
   
@@ -543,8 +430,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://0.0.0.0:${PORT}/health`);
   console.log(`📍 Stats: http://0.0.0.0:${PORT}/stats`);
-  console.log(`📍 Admin reset: http://0.0.0.0:${PORT}/admin/reset-all`);
-  console.log(`📍 Admin status: http://0.0.0.0:${PORT}/admin/status`);
   console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
