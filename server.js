@@ -433,4 +433,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`📍 Test Django connection: http://0.0.0.0:${PORT}/test-django`);
   console.log(`📡 Socket.IO ready for connections`);
 });
-
